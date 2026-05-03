@@ -1,0 +1,113 @@
+name: Plugin Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "GitHub release tag to create or update"
+        required: true
+      release_name:
+        description: "Optional release title"
+        required: false
+      source:
+        description: "Catalog source label"
+        required: true
+        default: "official"
+
+permissions:
+  contents: write
+
+jobs:
+  package-plugin:
+    name: Package plugin
+    runs-on: windows-latest
+
+    env:
+      HF_PLUGIN_SIGNING_PRIVATE_KEY: ${{ secrets.HF_PLUGIN_SIGNING_PRIVATE_KEY }}
+      HF_PLUGIN_SIGNING_KEY_ID: ${{ secrets.HF_PLUGIN_SIGNING_KEY_ID }}
+      HF_ADMIN_TOKEN: ${{ secrets.HF_ADMIN_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout HaloForge tooling
+        uses: actions/checkout@v4
+        with:
+          repository: HaloForgeAI/HaloForge
+          path: .haloforge-tools
+          token: ${{ secrets.HALOFORGE_TOOLS_TOKEN || github.token }}
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Package .hfpkg
+        shell: pwsh
+        run: |
+          cargo run --manifest-path .haloforge-tools/tools/hf-pack/Cargo.toml -- pack . --release --target x86_64-pc-windows-msvc --out dist/plugin-release
+          $pkg = Get-ChildItem dist/plugin-release -Filter *.hfpkg | Select-Object -First 1
+          if (-not $pkg) { throw "No .hfpkg artifact was created." }
+          $sha = Get-ChildItem dist/plugin-release -Filter *.hfpkg.sha256 | Select-Object -First 1
+          if (-not $sha) { throw "No .hfpkg.sha256 file was created." }
+          "PKG_PATH=$($pkg.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PKG_NAME=$($pkg.Name)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SHA_PATH=$($sha.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Create or update GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ inputs.release_tag }}"
+          $title = if ("${{ inputs.release_name }}") { "${{ inputs.release_name }}" } else { "Plugin $tag" }
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title $title --notes "Automated HaloForge plugin release"
+          }
+          gh release upload $tag "$env:PKG_PATH" "$env:SHA_PATH" --clobber
+
+      - name: Generate catalog draft metadata
+        shell: pwsh
+        run: |
+          $artifactUrl = "https://github.com/${{ github.repository }}/releases/download/${{ inputs.release_tag }}/$env:PKG_NAME"
+          $args = @(
+            "run", "--manifest-path", ".haloforge-tools/tools/hf-pack/Cargo.toml", "--",
+            "metadata", "$env:PKG_PATH",
+            "--artifact-url", $artifactUrl,
+            "--source", "${{ inputs.source }}",
+            "--repository-url", "https://github.com/${{ github.repository }}",
+            "--pretty",
+            "--output", "dist/plugin-release/catalog-draft.json"
+          )
+          if ($env:HF_PLUGIN_SIGNING_KEY_ID) { $args += @("--signing-key-id", $env:HF_PLUGIN_SIGNING_KEY_ID) }
+          if ($env:HF_PLUGIN_SIGNING_PRIVATE_KEY) { $args += @("--signing-key-env", "HF_PLUGIN_SIGNING_PRIVATE_KEY") }
+          cargo @args
+
+      - name: Upload metadata to release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ inputs.release_tag }}" dist/plugin-release/catalog-draft.json --clobber
+
+      - name: Submit catalog draft
+        if: env.HF_ADMIN_TOKEN != ''
+        shell: pwsh
+        run: cargo run --manifest-path .haloforge-tools/tools/hf-pack/Cargo.toml -- submit dist/plugin-release/catalog-draft.json --api-base-url https://api.haloforge.link --token-env HF_ADMIN_TOKEN
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-release-${{ github.run_id }}
+          path: |
+            dist/plugin-release/*.hfpkg
+            dist/plugin-release/*.hfpkg.sha256
+            dist/plugin-release/catalog-draft.json

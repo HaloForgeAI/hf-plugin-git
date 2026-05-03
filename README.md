@@ -23,15 +23,31 @@ A built-in Level 1 plugin that provides Git repository management directly insid
 
 ```
 hf-plugin-git/
-├── backend/          # Rust crate — statically linked into the app binary
+├── backend/          # Rust crate — packaged as the native plugin backend
 │   └── src/
 │       ├── lib.rs              # Plugin entry point, IPC command registration
 │       ├── commands.rs         # repo persistence + status/log/branch/action commands
 │       └── workflow_steps.rs   # Workflow step executor
-├── app/              # React components compiled into the main app bundle
-│   └── GitPanel.tsx            # Full panel UI (registered via src/builtins/index.ts)
+├── app/              # React UI packaged as the plugin frontend
+│   └── GitPanel.tsx            # Full panel UI
 └── manifest.json     # Plugin manifest
 ```
+
+## Packaging
+
+This repository builds independently from the main HaloForge app. The backend uses the published
+`haloforge-plugin-api` crate, and the frontend uses `@haloforge/plugin-sdk`.
+
+Local package check:
+
+```bash
+cargo run --manifest-path ../HaloForge/tools/hf-pack/Cargo.toml -- check .
+cargo run --manifest-path ../HaloForge/tools/hf-pack/Cargo.toml -- pack . --release --out dist/plugin-release
+```
+
+GitHub release packaging uses `.github/workflows/plugin-release.yml`. If the HaloForge tooling
+repository is private, set `HALOFORGE_TOOLS_TOKEN` with read access to `HaloForgeAI/HaloForge`.
+Set `HF_ADMIN_TOKEN` to submit generated catalog metadata to the production plugin catalog.
 
 ## IPC commands
 

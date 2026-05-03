@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { useI18nStore } from "../../../src/shared/stores/i18nStore";
 
 const en = {
   "common.browse": "Browse",
@@ -106,7 +105,7 @@ const zh: Record<GitTranslationKey, string> = {
 const translations = { en, zh };
 
 export function useGitT() {
-  const locale = useI18nStore((s) => s.locale);
+  const locale = getLocale();
   const dict = translations[locale];
 
   return useCallback((key: GitTranslationKey, vars?: Record<string, string | number>): string => {
@@ -120,3 +119,9 @@ export function useGitT() {
 }
 
 export type { GitTranslationKey };
+
+function getLocale(): "en" | "zh" {
+  const stored = window.localStorage.getItem("hf:locale");
+  if (stored === "zh" || stored === "en") return stored;
+  return navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
+}

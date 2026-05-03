@@ -45,9 +45,7 @@ cargo run --manifest-path ../HaloForge/tools/hf-pack/Cargo.toml -- check .
 cargo run --manifest-path ../HaloForge/tools/hf-pack/Cargo.toml -- pack . --release --out dist/plugin-release
 ```
 
-GitHub release packaging uses `.github/workflows/plugin-release.yml`. If the HaloForge tooling
-repository is private, set `HALOFORGE_TOOLS_TOKEN` with read access to `HaloForgeAI/HaloForge`.
-Set `HF_ADMIN_TOKEN` to submit generated catalog metadata to the production plugin catalog.
+GitHub release packaging uses `.github/workflows/plugin-release.yml` and the public `/plugin-pack` npm package. Set `HF_ADMIN_TOKEN` to submit generated catalog metadata to the production plugin catalog.
 
 ## IPC commands
 

@@ -1,0 +1,93 @@
+{
+  "$schema": "https://haloforge.dev/schemas/plugin/v1.json",
+  "id": "dev.haloforge.git",
+  "name": "Git Integration",
+  "version": "1.1.0",
+  "description": "Git repository management inside DevKit with saved repos, validation, status, and common Git actions.",
+  "long_description": "Adds a Git tab to DevKit with persistent saved repositories, clear validation for non-Git folders, working tree status, recent log, branch browsing, and quick actions such as fetch, pull, push, commit, and checkout. Also registers git_pull, git_fetch, and git_commit workflow step types.",
+  "author": "HaloForge Team",
+  "homepage": "https://github.com/HaloForgeAI/hf-plugin-git",
+  "license": "MIT",
+  "keywords": ["git", "vcs", "devkit", "workflow"],
+  "icon": "assets/icon.png",
+
+  "compatibility": {
+    "min_app_version": "1.0.0",
+    "platforms": ["windows", "macos", "linux"]
+  },
+
+  "capability_levels": [1, 4],
+
+  "integration": {
+    "level1": {
+      "parent_module": "devkit",
+      "tab_id": "git",
+      "tab_label": "Git",
+      "tab_icon": "GitBranch",
+      "tab_position": "after:snippet",
+      "panel_entry": "frontend/index.js"
+    },
+    "level4": {
+      "workflow_step_types": ["git_pull", "git_fetch", "git_commit", "git_checkout"]
+    }
+  },
+
+  "entry": {
+    "native": {
+      "macos_arm64":    "native/aarch64-apple-darwin.dylib",
+      "macos_x64":      "native/x86_64-apple-darwin.dylib",
+      "windows_x64":    "native/x86_64-pc-windows-msvc.dll",
+      "windows_arm64":  "native/aarch64-pc-windows-msvc.dll",
+      "linux_x64":      "native/x86_64-unknown-linux-gnu.so",
+      "linux_arm64":    "native/aarch64-unknown-linux-gnu.so"
+    },
+    "frontend": "frontend/index.js",
+    "frontend_styles": "frontend/styles.css"
+  },
+
+  "permissions": [
+    { "type": "ipc_register" },
+    { "type": "process_spawn_whitelist", "value": ["git"] },
+    { "type": "filesystem_read" },
+    { "type": "database_create_tables" },
+    { "type": "events_emit" },
+    { "type": "events_listen" }
+  ],
+
+  "settings_schema": {
+    "type": "object",
+    "properties": {
+      "default_remote": {
+        "type": "string",
+        "title": "Default Remote",
+        "default": "origin"
+      },
+      "show_ahead_behind": {
+        "type": "boolean",
+        "title": "Show ahead/behind count",
+        "default": true
+      },
+      "auto_fetch_interval": {
+        "type": "number",
+        "title": "Auto-fetch interval (minutes, 0 = disabled)",
+        "minimum": 0,
+        "maximum": 60,
+        "default": 0
+      }
+    }
+  },
+
+  "commands": [
+    { "id": "git_saved_repos", "description": "List saved repositories for the Git panel" },
+    { "id": "git_add_repo", "description": "Validate and save a repository path" },
+    { "id": "git_remove_repo", "description": "Remove a saved repository path" },
+    { "id": "git_status",   "description": "Get git status for a repository path" },
+    { "id": "git_log",      "description": "Get recent commit log" },
+    { "id": "git_branches", "description": "List local and remote branches" },
+    { "id": "git_pull",     "description": "Run git pull" },
+    { "id": "git_fetch",    "description": "Run git fetch" },
+    { "id": "git_push",     "description": "Run git push" },
+    { "id": "git_commit",   "description": "Create a git commit" },
+    { "id": "git_checkout", "description": "Switch or create a branch" }
+  ]
+}

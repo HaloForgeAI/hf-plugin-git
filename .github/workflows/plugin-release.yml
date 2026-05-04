@@ -42,6 +42,28 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: Validate release inputs
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.release_tag }}".Trim()
+          $title = "${{ inputs.release_name }}".Trim()
+
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            throw "release_tag is required."
+          }
+          if ($tag -match "System\.Collections\.Hashtable" -or $title -match "System\.Collections\.Hashtable") {
+            throw 'Workflow inputs were expanded incorrectly. In PowerShell, use $($release.tag) instead of "$release.tag" when dispatching this workflow.'
+          }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
+            throw "release_tag '$tag' must look like v1.2.3 or v1.2.3-rc.1."
+          }
+          if ([string]::IsNullOrWhiteSpace($title)) {
+            $title = "Plugin $tag"
+          }
+
+          "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "RELEASE_TITLE=$title" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Package .hfpkg
         shell: pwsh
         run: |
@@ -59,18 +81,51 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = "${{ inputs.release_tag }}"
-          $title = if ("${{ inputs.release_name }}") { "${{ inputs.release_name }}" } else { "Plugin $tag" }
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title $title --notes "Automated HaloForge plugin release"
+          function Invoke-ReleaseUpload {
+            param(
+              [Parameter(Mandatory = $true)][string]$Tag,
+              [Parameter(Mandatory = $true)][string]$Path
+            )
+
+            if (-not (Test-Path $Path)) {
+              throw "Release asset not found: $Path"
+            }
+
+            $assetName = Split-Path -Leaf $Path
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              & gh release upload $Tag $Path --clobber
+              if ($LASTEXITCODE -eq 0) {
+                return
+              }
+              if ($attempt -eq 3) {
+                throw "Failed to upload $assetName to release $Tag after $attempt attempts."
+              }
+              Start-Sleep -Seconds (2 * $attempt)
+              & gh release view $Tag --json tagName,url *> $null
+            }
           }
-          gh release upload $tag "$env:PKG_PATH" "$env:SHA_PATH" --clobber
+
+          & gh release view $env:RELEASE_TAG --json tagName,url *> $null
+          if ($LASTEXITCODE -ne 0) {
+            & gh release create $env:RELEASE_TAG --title $env:RELEASE_TITLE --notes "Automated HaloForge plugin release"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to create release $env:RELEASE_TAG."
+            }
+            Start-Sleep -Seconds 2
+          } else {
+            & gh release edit $env:RELEASE_TAG --title $env:RELEASE_TITLE --notes "Automated HaloForge plugin release"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to update release $env:RELEASE_TAG."
+            }
+          }
+
+          Invoke-ReleaseUpload -Tag $env:RELEASE_TAG -Path $env:PKG_PATH
+          Invoke-ReleaseUpload -Tag $env:RELEASE_TAG -Path $env:SHA_PATH
 
       - name: Generate catalog draft metadata
         shell: pwsh
         run: |
-          $artifactUrl = "https://github.com/${{ github.repository }}/releases/download/${{ inputs.release_tag }}/$env:PKG_NAME"
+          $artifactUrl = "https://github.com/${{ github.repository }}/releases/download/$env:RELEASE_TAG/$env:PKG_NAME"
           $args = @(
             "--yes", "@haloforge/plugin-pack@0.1.3",
             "metadata", "$env:PKG_PATH",
@@ -88,12 +143,36 @@ jobs:
             $args += @("--signing-key-env", "HF_PLUGIN_SIGNING_PRIVATE_KEY")
           }
           npx @args
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to generate catalog draft metadata."
+          }
+
+          $draft = Get-Content dist/plugin-release/catalog-draft.json -Raw | ConvertFrom-Json
+          if ($draft.version.artifact_url -ne $artifactUrl) {
+            throw "Generated catalog draft artifact_url does not match the release tag."
+          }
 
       - name: Upload metadata to release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ inputs.release_tag }}" dist/plugin-release/catalog-draft.json --clobber
+        run: |
+          $path = "dist/plugin-release/catalog-draft.json"
+          if (-not (Test-Path $path)) {
+            throw "Release asset not found: $path"
+          }
+
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            & gh release upload $env:RELEASE_TAG $path --clobber
+            if ($LASTEXITCODE -eq 0) {
+              return
+            }
+            if ($attempt -eq 3) {
+              throw "Failed to upload catalog-draft.json to release $env:RELEASE_TAG after $attempt attempts."
+            }
+            Start-Sleep -Seconds (2 * $attempt)
+            & gh release view $env:RELEASE_TAG --json tagName,url *> $null
+          }
 
       - name: Submit catalog draft
         if: env.HF_ADMIN_TOKEN != ''

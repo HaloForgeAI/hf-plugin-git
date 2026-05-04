@@ -6,7 +6,7 @@
   "description": "Git repository management inside DevKit with saved repos, validation, status, and common Git actions.",
   "long_description": "Adds a Git tab to DevKit with persistent saved repositories, clear validation for non-Git folders, working tree status, recent log, branch browsing, and quick actions such as fetch, pull, push, commit, and checkout. Also registers git_pull, git_fetch, and git_commit workflow step types.",
   "author": "HaloForge Team",
-  "homepage": "https://github.com/HaloForgeAI/hf-plugin-git",
+  "homepage": "https://haloforge.link/catalog/plugins/git",
   "license": "MIT",
   "keywords": ["git", "vcs", "devkit", "workflow"],
   "icon": "assets/icon.png",

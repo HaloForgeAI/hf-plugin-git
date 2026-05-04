@@ -76,6 +76,7 @@ jobs:
             "metadata", "$env:PKG_PATH",
             "--artifact-url", $artifactUrl,
             "--source", "${{ inputs.source }}",
+            "--homepage-url", "https://haloforge.link/catalog/plugins/git",
             "--repository-url", "https://github.com/${{ github.repository }}",
             "--pretty",
             "--output", "dist/plugin-release/catalog-draft.json"

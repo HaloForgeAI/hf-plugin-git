@@ -23,6 +23,8 @@ jobs:
     runs-on: windows-latest
 
     env:
+      HF_PLUGIN_SIGNING_PRIVATE_KEY: ${{ secrets.HF_PLUGIN_SIGNING_PRIVATE_KEY }}
+      HF_PLUGIN_SIGNING_KEY_ID: ${{ secrets.HF_PLUGIN_SIGNING_KEY_ID }}
       HF_ADMIN_TOKEN: ${{ secrets.HF_ADMIN_TOKEN }}
 
     steps:
@@ -69,7 +71,22 @@ jobs:
         shell: pwsh
         run: |
           $artifactUrl = "https://github.com/${{ github.repository }}/releases/download/${{ inputs.release_tag }}/$env:PKG_NAME"
-          npx --yes @haloforge/plugin-pack@0.1.1 metadata "$env:PKG_PATH" --artifact-url $artifactUrl --source "${{ inputs.source }}" --repository-url "https://github.com/${{ github.repository }}" --pretty --output dist/plugin-release/catalog-draft.json
+          $args = @(
+            "--yes", "@haloforge/plugin-pack@0.1.1",
+            "metadata", "$env:PKG_PATH",
+            "--artifact-url", $artifactUrl,
+            "--source", "${{ inputs.source }}",
+            "--repository-url", "https://github.com/${{ github.repository }}",
+            "--pretty",
+            "--output", "dist/plugin-release/catalog-draft.json"
+          )
+          if ($env:HF_PLUGIN_SIGNING_KEY_ID) {
+            $args += @("--signing-key-id", $env:HF_PLUGIN_SIGNING_KEY_ID)
+          }
+          if ($env:HF_PLUGIN_SIGNING_PRIVATE_KEY) {
+            $args += @("--signing-key-env", "HF_PLUGIN_SIGNING_PRIVATE_KEY")
+          }
+          npx @args
 
       - name: Upload metadata to release
         shell: pwsh

@@ -30,7 +30,7 @@ impl HaloForgePlugin for GitPlugin {
         PluginMetadata {
             id: "dev.haloforge.git".into(),
             name: "Git Integration".into(),
-            version: "1.1.0".into(),
+            version: "1.1.2".into(),
             description: "Git branch, status, and log inside DevKit.".into(),
             author: "HaloForge Team".into(),
             abi_version: PLUGIN_ABI_VERSION,
@@ -161,3 +161,4 @@ impl HaloForgePlugin for GitPlugin {
 // declare_plugin! is intentionally omitted for built-in plugins:
 // they are registered via constructor function pointers (no dlopen needed)
 // and the #[no_mangle] exports would clash with other built-in rlibs on MSVC.
+hf_plugin_api::declare_plugin!(GitPlugin, GitPlugin::new);

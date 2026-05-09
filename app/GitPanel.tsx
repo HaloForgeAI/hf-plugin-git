@@ -2,22 +2,17 @@
  * Built-in Git Integration panel (Level 1 — DevKit tab).
  *
  * This component is compiled directly into the main HaloForge app bundle
- * (not a separate ESM bundle). It uses plugin_invoke to dispatch commands
- * to the statically-linked GitPlugin backend.
+ * (not a separate ESM bundle). It uses the public plugin SDK helpers to
+ * dispatch commands to the statically-linked GitPlugin backend.
  */
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invokePlugin, pickHostDirectory } from "@haloforge/plugin-sdk";
 import clsx from "clsx";
 import { ArrowLeft, ArrowRight, Download, Folder, GitBranch, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useGitT } from "./i18n";
 
 function gitInvoke<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
-  return invoke<T>("plugin_invoke", {
-    args: {
-      wire_name: `plugin_dev_haloforge_git_${cmd}`,
-      args,
-    },
-  });
+  return invokePlugin<T>(cmd, args);
 }
 
 const LAST_REPO_STORAGE_KEY = "hf-plugin-git:selectedRepoPath";
@@ -756,7 +751,7 @@ export function GitPanel() {
 
   const handleBrowse = useCallback(async () => {
     try {
-      const picked = await invoke<string | null>("devkit_pick_directory", {
+      const picked = await pickHostDirectory({
         title: t("git.pickDirectoryTitle"),
       });
       if (picked) {

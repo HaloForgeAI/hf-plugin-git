@@ -2,7 +2,7 @@
   "$schema": "https://haloforge.dev/schemas/plugin/v1.json",
   "id": "dev.haloforge.git",
   "name": "Git Integration",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Git repository management inside DevKit with saved repos, validation, status, and common Git actions.",
   "long_description": "Adds a Git tab to DevKit with persistent saved repositories, clear validation for non-Git folders, working tree status, recent log, branch browsing, and quick actions such as fetch, pull, push, commit, and checkout. Also registers git_pull, git_fetch, and git_commit workflow step types.",
   "author": "HaloForge Team",
@@ -13,10 +13,12 @@
 
   "compatibility": {
     "min_app_version": "0.6.0",
+    "min_host_api_version": "0.1.0",
     "platforms": ["windows", "macos", "linux"]
   },
 
   "capability_levels": [1, 4],
+  "host_capabilities": ["file_dialogs"],
 
   "integration": {
     "level1": {
@@ -50,7 +52,8 @@
     { "type": "filesystem_read" },
     { "type": "database_create_tables" },
     { "type": "events_emit" },
-    { "type": "events_listen" }
+    { "type": "events_listen" },
+    { "type": "host_file_dialogs" }
   ],
 
   "settings_schema": {

@@ -1,6 +1,6 @@
 [package]
 name = "hf-plugin-git"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 description = "HaloForge built-in Git Integration plugin (backend)"
 
@@ -11,7 +11,7 @@ name = "hf_plugin_git"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-hf-plugin-api = { package = "haloforge-plugin-api", version = "0.2" }
+hf-plugin-api = { package = "haloforge-plugin-api", version = "0.2.10" }
 serde       = { version = "1", features = ["derive"] }
 serde_json  = "1"
 thiserror   = "2"

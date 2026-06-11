@@ -11,15 +11,13 @@
     "@haloforge/plugin-sdk": "^0.2.13",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-opener": "^2.0.0",
-    "@toast-ui/editor": "^3.2.2",
     "clsx": "^2.1.1",
     "framer-motion": "^12.0.0",
     "lucide-react": "^0.500.0",
     "react-markdown": "^9.0.0",
     "rehype-highlight": "^7.0.0",
     "remark-gfm": "^4.0.0",
-    "unist-util-visit": "^5.0.0",
-    "vditor": "^3.11.2"
+    "unist-util-visit": "^5.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

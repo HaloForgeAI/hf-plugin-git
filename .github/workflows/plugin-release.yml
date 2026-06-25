@@ -27,11 +27,13 @@ jobs:
           - name: windows-x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            asset_suffix: windows-x64
+            asset_suffix: ""
+            artifact_suffix: windows-x64
           - name: macos-arm64
             os: macos-26
             target: aarch64-apple-darwin
             asset_suffix: macos-arm64
+            artifact_suffix: macos-arm64
     runs-on: ${{ matrix.platform.os }}
 
     env:
@@ -84,15 +86,20 @@ jobs:
           npx --yes @haloforge/plugin-pack@0.2.13 pack . --release --target $target --out dist/plugin-release
           $pkg = Get-ChildItem dist/plugin-release -Filter *.hfpkg | Select-Object -First 1
           if (-not $pkg) { throw "No .hfpkg artifact was created." }
-          $renamedName = "$([System.IO.Path]::GetFileNameWithoutExtension($pkg.Name))-$suffix.hfpkg"
-          $renamedPath = Join-Path $pkg.DirectoryName $renamedName
-          Move-Item -Path $pkg.FullName -Destination $renamedPath -Force
+          if ([string]::IsNullOrWhiteSpace($suffix)) {
+            $packageName = $pkg.Name
+            $packagePath = $pkg.FullName
+          } else {
+            $packageName = "$([System.IO.Path]::GetFileNameWithoutExtension($pkg.Name))-$suffix.hfpkg"
+            $packagePath = Join-Path $pkg.DirectoryName $packageName
+            Move-Item -Path $pkg.FullName -Destination $packagePath -Force
+          }
           Get-ChildItem dist/plugin-release -Filter *.hfpkg.sha256 | Remove-Item -Force
-          $digest = (Get-FileHash -Algorithm SHA256 -Path $renamedPath).Hash.ToLowerInvariant()
-          $shaPath = "$renamedPath.sha256"
-          "$digest  $renamedName" | Set-Content -Path $shaPath
-          "PKG_PATH=$renamedPath" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "PKG_NAME=$renamedName" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $digest = (Get-FileHash -Algorithm SHA256 -Path $packagePath).Hash.ToLowerInvariant()
+          $shaPath = "$packagePath.sha256"
+          "$digest  $packageName" | Set-Content -Path $shaPath
+          "PKG_PATH=$packagePath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PKG_NAME=$packageName" | Out-File -FilePath $env:GITHUB_ENV -Append
           "SHA_PATH=$shaPath" | Out-File -FilePath $env:GITHUB_ENV -Append
           "PLUGIN_PLATFORM_SUFFIX=$suffix" | Out-File -FilePath $env:GITHUB_ENV -Append
 
@@ -149,7 +156,11 @@ jobs:
         shell: pwsh
         run: |
           $artifactUrl = "https://github.com/${{ github.repository }}/releases/download/$env:RELEASE_TAG/$env:PKG_NAME"
-          $draftPath = "dist/plugin-release/catalog-draft-$env:PLUGIN_PLATFORM_SUFFIX.json"
+          if ([string]::IsNullOrWhiteSpace($env:PLUGIN_PLATFORM_SUFFIX)) {
+            $draftPath = "dist/plugin-release/catalog-draft.json"
+          } else {
+            $draftPath = "dist/plugin-release/catalog-draft-$env:PLUGIN_PLATFORM_SUFFIX.json"
+          }
           $args = @(
             "--yes", "@haloforge/plugin-pack@0.2.13",
             "metadata", "$env:PKG_PATH",
@@ -176,10 +187,6 @@ jobs:
             throw "Generated catalog draft artifact_url does not match the release tag."
           }
           "CATALOG_DRAFT_PATH=$draftPath" | Out-File -FilePath $env:GITHUB_ENV -Append
-          if ($env:PLUGIN_PLATFORM_SUFFIX -eq "windows-x64") {
-            Copy-Item $draftPath "dist/plugin-release/catalog-draft.json" -Force
-            "LEGACY_CATALOG_DRAFT_PATH=dist/plugin-release/catalog-draft.json" | Out-File -FilePath $env:GITHUB_ENV -Append
-          }
 
       - name: Upload metadata to release
         shell: pwsh
@@ -210,14 +217,14 @@ jobs:
           }
 
       - name: Submit catalog draft
-        if: env.HF_ADMIN_TOKEN != '' && matrix.platform.asset_suffix == 'windows-x64'
+        if: env.HF_ADMIN_TOKEN != '' && matrix.platform.name == 'windows-x64'
         shell: pwsh
         run: npx --yes @haloforge/plugin-pack@0.2.13 submit dist/plugin-release/catalog-draft.json --api-base-url https://admin.haloforge.dev --token-env HF_ADMIN_TOKEN
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: plugin-release-${{ matrix.platform.asset_suffix }}-${{ github.run_id }}
+          name: plugin-release-${{ matrix.platform.artifact_suffix }}-${{ github.run_id }}
           path: |
             dist/plugin-release/*.hfpkg
             dist/plugin-release/*.hfpkg.sha256

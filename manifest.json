@@ -43,7 +43,8 @@
       "linux_x64":      "native/x86_64-unknown-linux-gnu.so",
       "linux_arm64":    "native/aarch64-unknown-linux-gnu.so"
     },
-    "frontend": "frontend/index.js"
+    "frontend": "frontend/index.js",
+    "frontend_styles": "frontend/styles.css"
   },
 
   "permissions": [

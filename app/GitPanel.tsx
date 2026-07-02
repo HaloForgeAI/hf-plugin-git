@@ -1123,7 +1123,7 @@ export function GitPanel() {
   }, [checkoutBranch, createBranch, handleAction, t]);
 
   return (
-    <div className="space-y-4">
+    <div className="hf-git-panel space-y-4">
       {error && <FeedbackBanner tone="error" message={error} />}
       {lastOutput && !error && <FeedbackBanner tone="success" message={lastOutput} />}
 

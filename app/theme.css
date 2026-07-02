@@ -1,0 +1,109 @@
+.hf-git-panel {
+  --hf-git-accent: var(--color-primary, #1e88e5);
+  --hf-git-surface: color-mix(in srgb, var(--color-surface, #ffffff) 86%, var(--color-background, #f7f8fb));
+  --hf-git-panel: color-mix(in srgb, var(--color-surface, #ffffff) 74%, transparent);
+  --hf-git-control: color-mix(in srgb, var(--color-background, #f7f8fb) 88%, var(--color-surface, #ffffff));
+  --hf-git-control-hover: color-mix(in srgb, var(--color-surface, #ffffff) 88%, var(--hf-git-accent) 4%);
+  --hf-git-border: color-mix(in srgb, var(--color-border, #d9dee7) 82%, transparent);
+  --hf-git-muted-border: color-mix(in srgb, var(--color-border, #d9dee7) 58%, transparent);
+  --hf-git-accent-soft: color-mix(in srgb, var(--hf-git-accent) 10%, var(--color-surface, #ffffff));
+  --hf-git-accent-border: color-mix(in srgb, var(--hf-git-accent) 34%, var(--color-border, #d9dee7));
+  --hf-git-success: color-mix(in srgb, #16a34a 72%, var(--color-foreground, #15171a));
+  --hf-git-success-soft: color-mix(in srgb, #16a34a 10%, var(--color-surface, #ffffff));
+  --hf-git-success-border: color-mix(in srgb, #16a34a 28%, var(--color-border, #d9dee7));
+  --hf-git-warning: color-mix(in srgb, #d97706 76%, var(--color-foreground, #15171a));
+  --hf-git-warning-soft: color-mix(in srgb, #d97706 11%, var(--color-surface, #ffffff));
+  --hf-git-warning-border: color-mix(in srgb, #d97706 30%, var(--color-border, #d9dee7));
+  --hf-git-danger: color-mix(in srgb, #dc2626 76%, var(--color-foreground, #15171a));
+  --hf-git-danger-soft: color-mix(in srgb, #dc2626 9%, var(--color-surface, #ffffff));
+  --hf-git-danger-border: color-mix(in srgb, #dc2626 28%, var(--color-border, #d9dee7));
+}
+
+.hf-git-panel [class~="bg-surface/20"],
+.hf-git-panel [class~="bg-surface/30"],
+.hf-git-panel [class~="bg-background/55"],
+.hf-git-panel [class~="bg-background/60"],
+.hf-git-panel [class~="bg-background/70"] {
+  background-color: var(--hf-git-panel) !important;
+}
+
+.hf-git-panel [class~="bg-background"],
+.hf-git-panel [class~="bg-background/60"] {
+  background-color: var(--hf-git-control) !important;
+}
+
+.hf-git-panel [class~="border-border"],
+.hf-git-panel [class~="border-border/20"],
+.hf-git-panel [class~="border-border/25"],
+.hf-git-panel [class~="border-border/30"],
+.hf-git-panel [class~="border-border/40"],
+.hf-git-panel [class~="border-border/50"],
+.hf-git-panel [class~="border-border/60"] {
+  border-color: var(--hf-git-border) !important;
+}
+
+.hf-git-panel [class~="hover:bg-background"]:hover,
+.hf-git-panel [class~="hover:bg-surface"]:hover,
+.hf-git-panel [class~="hover:bg-surface/30"]:hover,
+.hf-git-panel [class~="hover:bg-surface/40"]:hover,
+.hf-git-panel [class~="hover:bg-surface/50"]:hover {
+  background-color: var(--hf-git-control-hover) !important;
+}
+
+.hf-git-panel [class~="bg-primary/8"],
+.hf-git-panel [class~="bg-primary/10"],
+.hf-git-panel [class~="bg-primary/20"] {
+  background-color: var(--hf-git-accent-soft) !important;
+}
+
+.hf-git-panel [class~="border-primary/30"],
+.hf-git-panel [class~="border-primary/40"] {
+  border-color: var(--hf-git-accent-border) !important;
+}
+
+.hf-git-panel [class~="text-emerald-300"],
+.hf-git-panel [class~="text-emerald-400"],
+.hf-git-panel [class~="text-green-400"] {
+  color: var(--hf-git-success) !important;
+}
+
+.hf-git-panel [class~="bg-emerald-500/5"],
+.hf-git-panel [class~="bg-green-500/10"] {
+  background-color: var(--hf-git-success-soft) !important;
+}
+
+.hf-git-panel [class~="border-emerald-500/20"] {
+  border-color: var(--hf-git-success-border) !important;
+}
+
+.hf-git-panel [class~="text-yellow-300"],
+.hf-git-panel [class~="text-yellow-400"] {
+  color: var(--hf-git-warning) !important;
+}
+
+.hf-git-panel [class~="bg-yellow-500/10"] {
+  background-color: var(--hf-git-warning-soft) !important;
+}
+
+.hf-git-panel [class~="text-red-300"],
+.hf-git-panel [class~="text-red-300/80"],
+.hf-git-panel [class~="text-red-400"] {
+  color: var(--hf-git-danger) !important;
+}
+
+.hf-git-panel [class~="bg-red-500/5"],
+.hf-git-panel [class~="bg-red-500/10"],
+.hf-git-panel [class~="hover:bg-red-500/10"]:hover {
+  background-color: var(--hf-git-danger-soft) !important;
+}
+
+.hf-git-panel [class~="border-red-500/20"],
+.hf-git-panel [class~="border-red-500/30"] {
+  border-color: var(--hf-git-danger-border) !important;
+}
+
+.hf-git-panel input:focus,
+.hf-git-panel textarea:focus {
+  border-color: var(--hf-git-accent-border) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--hf-git-accent) 16%, transparent) !important;
+}

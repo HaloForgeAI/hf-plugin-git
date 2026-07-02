@@ -50,7 +50,25 @@ fn get_path(args: &Value) -> Result<String, PluginError> {
 }
 
 fn get_non_empty_str<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
-    args[key].as_str().map(str::trim).filter(|value| !value.is_empty())
+    args[key]
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn get_string_list(args: &Value, key: &str) -> Vec<String> {
+    args[key]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn sql_escape(value: &str) -> String {
@@ -77,7 +95,9 @@ fn normalize_existing_directory(path: &str) -> Result<String, PluginError> {
         return Err(PluginError::NotFound(format!("path not found: {trimmed}")));
     }
     if !dir.is_dir() {
-        return Err(PluginError::Custom(format!("path is not a directory: {trimmed}")));
+        return Err(PluginError::Custom(format!(
+            "path is not a directory: {trimmed}"
+        )));
     }
 
     dir.canonicalize()
@@ -89,9 +109,9 @@ fn resolve_repo_root(path: &str) -> Result<String, PluginError> {
     let normalized_path = normalize_existing_directory(path)?;
     match run_git(&["rev-parse", "--show-toplevel"], &normalized_path) {
         Ok(root) => Ok(root),
-        Err(PluginError::Process(message)) if message.contains("not a git repository") => {
-            Err(PluginError::Custom("Selected folder is not a Git repository.".into()))
-        }
+        Err(PluginError::Process(message)) if message.contains("not a git repository") => Err(
+            PluginError::Custom("Selected folder is not a Git repository.".into()),
+        ),
         Err(error) => Err(error),
     }
 }
@@ -99,6 +119,40 @@ fn resolve_repo_root(path: &str) -> Result<String, PluginError> {
 fn get_repo_path(args: &Value) -> Result<String, PluginError> {
     let path = get_path(args)?;
     resolve_repo_root(&path)
+}
+
+fn parse_status_line(line: &str) -> Option<Value> {
+    if line.len() < 3 {
+        return None;
+    }
+
+    let code = line.get(0..2).unwrap_or("").to_string();
+    let index = code.chars().next().unwrap_or(' ');
+    let worktree = code.chars().nth(1).unwrap_or(' ');
+    let mut file_path = line.get(3..).unwrap_or("").trim().to_string();
+    let mut original_path = String::new();
+
+    if matches!(index, 'R' | 'C') {
+        if let Some((from, to)) = file_path.clone().split_once(" -> ") {
+            original_path = from.trim().to_string();
+            file_path = to.trim().to_string();
+        }
+    }
+
+    let untracked = index == '?' && worktree == '?';
+    let staged = !untracked && index != ' ';
+    let unstaged = untracked || worktree != ' ';
+
+    Some(json!({
+        "path": file_path,
+        "original_path": original_path,
+        "code": code,
+        "index": index.to_string(),
+        "worktree": worktree.to_string(),
+        "staged": staged,
+        "unstaged": unstaged,
+        "untracked": untracked,
+    }))
 }
 
 // ─── Saved repos ─────────────────────────────────────────────────────────────
@@ -140,7 +194,9 @@ pub fn git_add_repo(args: Value, ctx: &dyn PluginContext) -> Result<Value, Plugi
     let input_path = get_path(&args)?;
     let repo_root = resolve_repo_root(&input_path).map_err(|error| match error {
         PluginError::Custom(message) if message == "Selected folder is not a Git repository." => {
-            PluginError::Custom("Selected folder is not a Git repository and cannot be added.".into())
+            PluginError::Custom(
+                "Selected folder is not a Git repository and cannot be added.".into(),
+            )
         }
         other => other,
     })?;
@@ -188,10 +244,15 @@ pub fn git_remove_repo(args: Value, ctx: &dyn PluginContext) -> Result<Value, Pl
 pub fn git_status(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginError> {
     let path = get_repo_path(&args)?;
 
-    let branch = run_git(&["rev-parse", "--abbrev-ref", "HEAD"], &path)
-        .unwrap_or_else(|_| "unknown".into());
+    let branch =
+        run_git(&["rev-parse", "--abbrev-ref", "HEAD"], &path).unwrap_or_else(|_| "unknown".into());
 
     let status_raw = run_git(&["status", "--porcelain"], &path).unwrap_or_default();
+    let changes: Vec<Value> = status_raw
+        .lines()
+        .filter(|line| !line.is_empty())
+        .filter_map(parse_status_line)
+        .collect();
 
     let staged: Vec<String> = status_raw
         .lines()
@@ -214,25 +275,33 @@ pub fn git_status(args: Value, _ctx: &dyn PluginContext) -> Result<Value, Plugin
     let (ahead, behind) = if let Some(ab) = ahead_behind {
         let parts: Vec<&str> = ab.split_whitespace().collect();
         (
-            parts.first().and_then(|s| s.parse::<i64>().ok()).unwrap_or(0),
-            parts.get(1).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0),
+            parts
+                .first()
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0),
+            parts
+                .get(1)
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0),
         )
     } else {
         (0, 0)
     };
 
-    let last_commit = run_git(&["log", "-1", "--pretty=format:%h %s", "--"], &path)
-        .unwrap_or_default();
+    let last_commit =
+        run_git(&["log", "-1", "--pretty=format:%h %s", "--"], &path).unwrap_or_default();
+    let is_clean = staged.is_empty() && unstaged.is_empty();
 
     Ok(json!({
         "repo_root": path,
         "branch": branch,
+        "changes": changes,
         "staged": staged,
         "unstaged": unstaged,
         "ahead": ahead,
         "behind": behind,
         "last_commit": last_commit,
-        "is_clean": staged.is_empty() && unstaged.is_empty(),
+        "is_clean": is_clean,
     }))
 }
 
@@ -276,8 +345,7 @@ pub fn git_log(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginErr
 pub fn git_branches(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginError> {
     let path = get_repo_path(&args)?;
 
-    let current = run_git(&["rev-parse", "--abbrev-ref", "HEAD"], &path)
-        .unwrap_or_default();
+    let current = run_git(&["rev-parse", "--abbrev-ref", "HEAD"], &path).unwrap_or_default();
 
     let local_raw = run_git(&["branch", "--format=%(refname:short)"], &path)?;
     let local: Vec<String> = local_raw.lines().map(|l| l.trim().to_string()).collect();
@@ -297,6 +365,42 @@ pub fn git_branches(args: Value, _ctx: &dyn PluginContext) -> Result<Value, Plug
     }))
 }
 
+// ─── git_remotes ──────────────────────────────────────────────────────────────
+
+pub fn git_remotes(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginError> {
+    let path = get_repo_path(&args)?;
+    let raw = run_git(&["remote", "-v"], &path).unwrap_or_default();
+    let mut remotes: HashMap<String, (String, String)> = HashMap::new();
+
+    for line in raw.lines() {
+        let mut parts = line.split_whitespace();
+        let Some(name) = parts.next() else { continue };
+        let Some(url) = parts.next() else { continue };
+        let kind = parts.next().unwrap_or("");
+        let entry = remotes
+            .entry(name.to_string())
+            .or_insert_with(|| (String::new(), String::new()));
+        if kind.contains("(fetch)") {
+            entry.0 = url.to_string();
+        } else if kind.contains("(push)") {
+            entry.1 = url.to_string();
+        }
+    }
+
+    let list: Vec<Value> = remotes
+        .into_iter()
+        .map(|(name, (fetch, push))| {
+            json!({
+                "name": name,
+                "fetch": fetch,
+                "push": push,
+            })
+        })
+        .collect();
+
+    Ok(json!({ "remotes": list }))
+}
+
 // ─── git_pull ─────────────────────────────────────────────────────────────────
 
 pub fn git_pull(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginError> {
@@ -306,7 +410,9 @@ pub fn git_pull(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginEr
     let rebase = args["rebase"].as_bool().unwrap_or(false);
 
     let mut git_args = vec!["pull"];
-    if rebase { git_args.push("--rebase"); }
+    if rebase {
+        git_args.push("--rebase");
+    }
     git_args.push(remote);
     if let Some(branch) = branch {
         git_args.push(branch);
@@ -324,7 +430,9 @@ pub fn git_fetch(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginE
     let prune = args["prune"].as_bool().unwrap_or(true);
 
     let mut git_args = vec!["fetch", remote];
-    if prune { git_args.push("--prune"); }
+    if prune {
+        git_args.push("--prune");
+    }
 
     let output = run_git(&git_args, &path)?;
     Ok(json!({ "success": true, "output": output }))
@@ -390,5 +498,108 @@ pub fn git_checkout(args: Value, _ctx: &dyn PluginContext) -> Result<Value, Plug
     };
 
     let output = run_git(&git_args, &path)?;
+    Ok(json!({ "success": true, "output": output }))
+}
+
+// ─── git_stage / git_unstage ─────────────────────────────────────────────────
+
+pub fn git_stage(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginError> {
+    let path = get_repo_path(&args)?;
+    let files = get_string_list(&args, "files");
+
+    let output = if files.is_empty() {
+        run_git(&["add", "-A"], &path)?
+    } else {
+        let mut git_args: Vec<&str> = vec!["add", "--"];
+        for file in &files {
+            git_args.push(file.as_str());
+        }
+        run_git(&git_args, &path)?
+    };
+
+    Ok(json!({ "success": true, "output": output }))
+}
+
+pub fn git_unstage(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginError> {
+    let path = get_repo_path(&args)?;
+    let files = get_string_list(&args, "files");
+
+    let output = if files.is_empty() {
+        run_git(&["restore", "--staged", "."], &path)?
+    } else {
+        let mut git_args: Vec<&str> = vec!["restore", "--staged", "--"];
+        for file in &files {
+            git_args.push(file.as_str());
+        }
+        run_git(&git_args, &path)?
+    };
+
+    Ok(json!({ "success": true, "output": output }))
+}
+
+// ─── git_discard ─────────────────────────────────────────────────────────────
+
+pub fn git_discard(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginError> {
+    let path = get_repo_path(&args)?;
+    let confirmed = args["confirm"].as_bool().unwrap_or(false);
+    if !confirmed {
+        return Err(PluginError::Custom(
+            "discard requires confirm=true because it permanently removes working tree changes"
+                .into(),
+        ));
+    }
+
+    let files = get_string_list(&args, "files");
+    if files.is_empty() {
+        return Err(PluginError::Custom("missing required field: files".into()));
+    }
+
+    let mut outputs = Vec::new();
+    for file in &files {
+        let status =
+            run_git(&["status", "--porcelain", "--", file.as_str()], &path).unwrap_or_default();
+        let output = if status.lines().any(|line| line.starts_with("??")) {
+            run_git(&["clean", "-f", "--", file.as_str()], &path)?
+        } else {
+            run_git(&["restore", "--worktree", "--", file.as_str()], &path)?
+        };
+        if !output.trim().is_empty() {
+            outputs.push(output);
+        }
+    }
+
+    Ok(json!({ "success": true, "output": outputs.join("\n") }))
+}
+
+// ─── git_diff ────────────────────────────────────────────────────────────────
+
+pub fn git_diff(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginError> {
+    let path = get_repo_path(&args)?;
+    let staged = args["staged"].as_bool().unwrap_or(false);
+    let file = get_non_empty_str(&args, "file");
+
+    let output = match (staged, file) {
+        (true, Some(file)) => run_git(&["diff", "--staged", "--", file], &path)?,
+        (true, None) => run_git(&["diff", "--staged"], &path)?,
+        (false, Some(file)) => run_git(&["diff", "--", file], &path)?,
+        (false, None) => run_git(&["diff"], &path)?,
+    };
+
+    Ok(json!({ "output": output }))
+}
+
+// ─── git_stash ───────────────────────────────────────────────────────────────
+
+pub fn git_stash(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginError> {
+    let path = get_repo_path(&args)?;
+    let message = get_non_empty_str(&args, "message").unwrap_or("HaloForge stash");
+    let include_untracked = args["include_untracked"].as_bool().unwrap_or(true);
+
+    let output = if include_untracked {
+        run_git(&["stash", "push", "-u", "-m", message], &path)?
+    } else {
+        run_git(&["stash", "push", "-m", message], &path)?
+    };
+
     Ok(json!({ "success": true, "output": output }))
 }

@@ -86,10 +86,16 @@
     { "id": "git_status",   "description": "Get git status for a repository path" },
     { "id": "git_log",      "description": "Get recent commit log" },
     { "id": "git_branches", "description": "List local and remote branches" },
+    { "id": "git_remotes",  "description": "List configured remotes" },
     { "id": "git_pull",     "description": "Run git pull" },
     { "id": "git_fetch",    "description": "Run git fetch" },
     { "id": "git_push",     "description": "Run git push" },
     { "id": "git_commit",   "description": "Create a git commit" },
-    { "id": "git_checkout", "description": "Switch or create a branch" }
+    { "id": "git_checkout", "description": "Switch or create a branch" },
+    { "id": "git_stage",    "description": "Stage selected files or all changes" },
+    { "id": "git_unstage",  "description": "Unstage selected files or all staged changes" },
+    { "id": "git_discard",  "description": "Discard selected working tree changes after confirmation" },
+    { "id": "git_diff",     "description": "Show unified diff for the working tree or staged changes" },
+    { "id": "git_stash",    "description": "Create a git stash" }
   ]
 }

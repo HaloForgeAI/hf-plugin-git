@@ -1,6 +1,6 @@
 use hf_plugin_api::{
-    HaloForgePlugin, IpcRegistrar, LogLevel, PluginContext, PluginError,
-    PluginMetadata, WorkflowStepTypeDefinition, PLUGIN_ABI_VERSION,
+    HaloForgePlugin, IpcRegistrar, LogLevel, PluginContext, PluginError, PluginMetadata,
+    WorkflowStepTypeDefinition, PLUGIN_ABI_VERSION,
 };
 use serde_json::Value;
 
@@ -58,13 +58,19 @@ impl HaloForgePlugin for GitPlugin {
         ipc.register("git_add_repo", Box::new(commands::git_add_repo))?;
         ipc.register("git_remove_repo", Box::new(commands::git_remove_repo))?;
         ipc.register("git_status", Box::new(commands::git_status))?;
-        ipc.register("git_log",    Box::new(commands::git_log))?;
+        ipc.register("git_log", Box::new(commands::git_log))?;
         ipc.register("git_branches", Box::new(commands::git_branches))?;
-        ipc.register("git_pull",   Box::new(commands::git_pull))?;
-        ipc.register("git_fetch",  Box::new(commands::git_fetch))?;
-        ipc.register("git_push",   Box::new(commands::git_push))?;
+        ipc.register("git_remotes", Box::new(commands::git_remotes))?;
+        ipc.register("git_pull", Box::new(commands::git_pull))?;
+        ipc.register("git_fetch", Box::new(commands::git_fetch))?;
+        ipc.register("git_push", Box::new(commands::git_push))?;
         ipc.register("git_commit", Box::new(commands::git_commit))?;
         ipc.register("git_checkout", Box::new(commands::git_checkout))?;
+        ipc.register("git_stage", Box::new(commands::git_stage))?;
+        ipc.register("git_unstage", Box::new(commands::git_unstage))?;
+        ipc.register("git_discard", Box::new(commands::git_discard))?;
+        ipc.register("git_diff", Box::new(commands::git_diff))?;
+        ipc.register("git_stash", Box::new(commands::git_stash))?;
 
         // ── Register workflow step types ───────────────────────────────────
         ipc.register_workflow_step_type(WorkflowStepTypeDefinition {

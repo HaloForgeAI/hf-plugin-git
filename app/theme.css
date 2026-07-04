@@ -107,3 +107,34 @@
   border-color: var(--hf-git-accent-border) !important;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--hf-git-accent) 16%, transparent) !important;
 }
+
+.hf-git-diff {
+  background-color: color-mix(in srgb, var(--hf-git-control) 94%, transparent);
+}
+
+.hf-git-diff span {
+  display: block;
+  min-height: 1.35em;
+  padding: 0 12px;
+}
+
+.hf-git-diff-add {
+  background-color: var(--hf-git-success-soft);
+  color: var(--hf-git-success);
+}
+
+.hf-git-diff-delete {
+  background-color: var(--hf-git-danger-soft);
+  color: var(--hf-git-danger);
+}
+
+.hf-git-diff-hunk {
+  background-color: var(--hf-git-accent-soft);
+  color: var(--hf-git-accent);
+  font-weight: 600;
+}
+
+.hf-git-diff-file {
+  color: var(--color-foreground, #15171a);
+  font-weight: 600;
+}

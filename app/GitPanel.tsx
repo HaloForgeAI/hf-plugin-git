@@ -4,12 +4,19 @@
  * The panel is compiled directly into the HaloForge app bundle and talks to
  * the statically-linked GitPlugin backend through the public plugin SDK.
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { invokePlugin, pickHostDirectory } from "@haloforge/plugin-sdk";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  invokePlugin,
+  OperationResultDialog,
+  pickHostDirectory,
+  type OperationResultDialogState,
+} from "@haloforge/plugin-sdk";
 import clsx from "clsx";
 import {
   ArrowLeft,
   ArrowRight,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Eye,
   FileDiff,
@@ -22,6 +29,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Search,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -32,6 +40,7 @@ function gitInvoke<T>(cmd: string, args: Record<string, unknown> = {}): Promise<
 }
 
 const LAST_REPO_STORAGE_KEY = "hf-plugin-git:selectedRepoPath";
+const HISTORY_PAGE_SIZE = 40;
 
 interface SavedRepo {
   id: string;
@@ -86,6 +95,17 @@ interface GitRemote {
 interface CommandResult {
   success?: boolean;
   output?: string;
+}
+
+interface CommitLogResult {
+  commits: Commit[];
+  limit?: number;
+  offset?: number;
+  has_more?: boolean;
+}
+
+interface GitGraphResult {
+  lines: string[];
 }
 
 type GitPage = "repos" | "detail";
@@ -153,6 +173,23 @@ function changeTone(code: string) {
   if (code === "D") return "text-red-300";
   if (code === "R" || code === "C") return "text-sky-300";
   return "text-yellow-300";
+}
+
+function diffLineClass(line: string) {
+  if (line.startsWith("+++ ") || line.startsWith("--- ")) return "hf-git-diff-file";
+  if (line.startsWith("@@")) return "hf-git-diff-hunk";
+  if (line.startsWith("+")) return "hf-git-diff-add";
+  if (line.startsWith("-")) return "hf-git-diff-delete";
+  return "";
+}
+
+function formatActionOutput(output: string | undefined, fallback: string) {
+  const trimmed = output?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : fallback;
+}
+
+function firstOutputLine(message: string) {
+  return message.trim().split(/\r?\n/).find((line) => line.trim().length > 0)?.trim() || message;
 }
 
 function defaultRemote(remotes: GitRemote[]) {
@@ -356,11 +393,11 @@ function ChangeRow({
     <div className="group flex items-center gap-2 border-b border-border/20 px-3 py-1.5 transition-colors hover:bg-surface/30">
       <span className={clsx("w-5 shrink-0 text-xs font-semibold", changeTone(code))}>{code}</span>
       <div className="min-w-0 flex-1">
-        <span className="block truncate font-mono text-xs text-foreground" title={change.path}>
+        <span className="block break-all font-mono text-xs leading-snug text-foreground" title={change.path}>
           {change.path}
         </span>
         {change.original_path && (
-          <span className="block truncate text-[10px] text-foreground-secondary/45" title={change.original_path}>
+          <span className="block break-all text-[10px] leading-snug text-foreground-secondary/45" title={change.original_path}>
             {change.original_path}
           </span>
         )}
@@ -409,7 +446,7 @@ function CommitRow({ commit }: { commit: Commit }) {
     <div className="flex items-start gap-2 border-b border-border/30 px-3 py-2 transition-colors hover:bg-surface/40">
       <code className="mt-0.5 shrink-0 text-xs text-primary">{commit.short}</code>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs text-foreground" title={commit.message}>{commit.message}</p>
+        <p className="break-words text-xs text-foreground" title={commit.message}>{commit.message}</p>
         <p className="mt-0.5 text-[10px] text-foreground-secondary/50">
           {commit.author} · {commit.when}
         </p>
@@ -440,11 +477,18 @@ function DiffPanel({
           {t("git.action.closeDiff")}
         </button>
       </div>
-      <div className="max-h-[320px] overflow-auto p-3">
+      <div className="max-h-[420px] overflow-auto">
         {loading ? (
           <div className="py-10 text-center text-xs text-foreground-secondary/45">{t("git.loadingDiff")}</div>
         ) : output.trim() ? (
-          <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-foreground-secondary">{output}</pre>
+          <pre className="hf-git-diff whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-foreground-secondary">
+            {output.split("\n").map((line, index) => (
+              <span key={`${index}:${line.slice(0, 12)}`} className={diffLineClass(line)}>
+                {line || " "}
+                {"\n"}
+              </span>
+            ))}
+          </pre>
         ) : (
           <div className="py-10 text-center text-xs text-foreground-secondary/45">{t("git.diff.empty")}</div>
         )}
@@ -458,6 +502,7 @@ function RepoDetailPage({
   repoPath,
   status,
   commits,
+  graphLines,
   branches,
   remotes,
   loading,
@@ -469,9 +514,15 @@ function RepoDetailPage({
   createBranch,
   stashMessage,
   diffState,
+  historyQuery,
+  historyOffset,
+  historyHasMore,
+  historyLoading,
   onBack,
   onRefresh,
   onAction,
+  onHistoryQueryChange,
+  onHistoryPage,
   onCommitMessageChange,
   onStageAllBeforeCommitChange,
   onCheckoutBranchChange,
@@ -490,6 +541,7 @@ function RepoDetailPage({
   repoPath: string;
   status: GitStatus | null;
   commits: Commit[];
+  graphLines: string[];
   branches: BranchInfo | null;
   remotes: GitRemote[];
   loading: boolean;
@@ -501,9 +553,15 @@ function RepoDetailPage({
   createBranch: boolean;
   stashMessage: string;
   diffState: { title: string; output: string; loading: boolean } | null;
+  historyQuery: string;
+  historyOffset: number;
+  historyHasMore: boolean;
+  historyLoading: boolean;
   onBack: () => void;
   onRefresh: () => void;
   onAction: (cmd: string, label: string, extraArgs?: Record<string, unknown>, afterAction?: () => void) => void;
+  onHistoryQueryChange: (value: string) => void;
+  onHistoryPage: (direction: "prev" | "next") => void;
   onCommitMessageChange: (value: string) => void;
   onStageAllBeforeCommitChange: (value: boolean) => void;
   onCheckoutBranchChange: (value: string) => void;
@@ -734,10 +792,66 @@ function RepoDetailPage({
 
             {activeTab === "history" && (
               <div>
-                {commits.length === 0 ? (
-                  <div className="px-3 py-8 text-center text-xs text-foreground-secondary/40">{t("git.noCommits")}</div>
+                <div className="flex flex-wrap items-center gap-2 border-b border-border/50 p-3">
+                  <div className="relative min-w-[220px] flex-1">
+                    <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground-secondary/40" />
+                    <input
+                      value={historyQuery}
+                      onChange={(e) => onHistoryQueryChange(e.target.value)}
+                      placeholder={t("git.history.searchPlaceholder")}
+                      className="w-full rounded-lg border border-border bg-background py-2 pl-8 pr-3 text-xs text-foreground placeholder:text-foreground-secondary/40 outline-none transition-all focus:border-primary/40 focus:ring-1 focus:ring-primary/20"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => onHistoryPage("prev")}
+                      disabled={busy || historyLoading || historyOffset === 0}
+                      className="rounded-md border border-border bg-background p-1.5 text-foreground-secondary transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      title={t("git.history.prevPage")}
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="min-w-[72px] text-center text-[10px] text-foreground-secondary/50">
+                      {t("git.history.pageLabel", { page: Math.floor(historyOffset / HISTORY_PAGE_SIZE) + 1 })}
+                    </span>
+                    <button
+                      onClick={() => onHistoryPage("next")}
+                      disabled={busy || historyLoading || !historyHasMore}
+                      className="rounded-md border border-border bg-background p-1.5 text-foreground-secondary transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      title={t("git.history.nextPage")}
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                {graphLines.length > 0 && (
+                  <details className="border-b border-border/40 bg-background/40">
+                    <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-foreground-secondary hover:text-foreground">
+                      {t("git.history.revisionGraph")}
+                    </summary>
+                    <pre className="max-h-48 overflow-auto px-3 pb-3 font-mono text-[11px] leading-relaxed text-foreground-secondary/75">
+                      {graphLines.join("\n")}
+                    </pre>
+                  </details>
+                )}
+
+                {historyLoading ? (
+                  <div className="px-3 py-8 text-center text-xs text-foreground-secondary/40">{t("git.history.loading")}</div>
+                ) : commits.length === 0 ? (
+                  <div className="px-3 py-8 text-center text-xs text-foreground-secondary/40">
+                    {historyQuery.trim() ? t("git.history.noSearchResults") : t("git.noCommits")}
+                  </div>
                 ) : (
-                  commits.map((commit) => <CommitRow key={commit.hash} commit={commit} />)
+                  <>
+                    <div className="border-b border-border/30 px-3 py-1.5 text-[10px] text-foreground-secondary/45">
+                      {t("git.history.showing", {
+                        start: historyOffset + 1,
+                        end: historyOffset + commits.length,
+                      })}
+                    </div>
+                    {commits.map((commit) => <CommitRow key={commit.hash} commit={commit} />)}
+                  </>
                 )}
               </div>
             )}
@@ -825,6 +939,7 @@ function RepoDetailPage({
                     <div className="flex flex-wrap gap-2">
                       <ActionButton label={t("git.action.fetch")} onClick={() => onAction("git_fetch", t("git.action.fetch"), { remote: remoteName, prune: true })} disabled={busy} icon={<Download size={12} />} />
                       <ActionButton label={t("git.action.pull")} onClick={() => onAction("git_pull", t("git.action.pull"), { remote: remoteName })} disabled={busy} icon={<Download size={12} />} />
+                      <ActionButton label={t("git.action.pullRebase")} onClick={() => onAction("git_pull", t("git.action.pullRebase"), { remote: remoteName, rebase: true })} disabled={busy} icon={<Download size={12} />} />
                       <ActionButton label={t("git.action.push")} onClick={() => onAction("git_push", t("git.action.push"), { remote: remoteName })} disabled={busy} icon={<Upload size={12} />} variant="primary" />
                     </div>
                   </div>
@@ -862,6 +977,7 @@ export function GitPanel() {
   const [inputPath, setInputPath] = useState("");
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [commits, setCommits] = useState<Commit[]>([]);
+  const [graphLines, setGraphLines] = useState<string[]>([]);
   const [branches, setBranches] = useState<BranchInfo | null>(null);
   const [remotes, setRemotes] = useState<GitRemote[]>([]);
   const [loading, setLoading] = useState(false);
@@ -875,9 +991,24 @@ export function GitPanel() {
   const [createBranch, setCreateBranch] = useState(false);
   const [stashMessage, setStashMessage] = useState("");
   const [diffState, setDiffState] = useState<{ title: string; output: string; loading: boolean } | null>(null);
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [operationResult, setOperationResult] = useState<OperationResultDialogState | null>(null);
+  const historyQueryRef = useRef("");
+  const historyOffsetRef = useRef(0);
 
   const currentRepo = savedRepos.find((repo) => repo.path === repoPath) ?? null;
   const busy = loading || runningAction !== null;
+
+  useEffect(() => {
+    historyQueryRef.current = historyQuery;
+  }, [historyQuery]);
+
+  useEffect(() => {
+    historyOffsetRef.current = historyOffset;
+  }, [historyOffset]);
 
   const rememberSelectedRepo = useCallback((path: string | null) => {
     try {
@@ -892,6 +1023,7 @@ export function GitPanel() {
     setRepoPath("");
     setStatus(null);
     setCommits([]);
+    setGraphLines([]);
     setBranches(null);
     setRemotes([]);
     setDiffState(null);
@@ -903,22 +1035,56 @@ export function GitPanel() {
     return result.repos;
   }, []);
 
-  const fetchAll = useCallback(async (path: string) => {
+  const fetchHistory = useCallback(async (path: string, query: string, offset: number) => {
+    if (!path) return;
+    setHistoryLoading(true);
+    setError(null);
+    try {
+      const result = await gitInvoke<CommitLogResult>("git_log", {
+        path,
+        limit: HISTORY_PAGE_SIZE,
+        offset,
+        query: query.trim() || undefined,
+      });
+      setCommits(result.commits);
+      setHistoryHasMore(Boolean(result.has_more));
+    } catch (e) {
+      setError(translateGitMessage(t, e instanceof Error ? e.message : String(e)));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [t]);
+
+  const fetchAll = useCallback(async (path: string, options?: { resetHistory?: boolean }) => {
     if (!path) return;
     setLoading(true);
     setError(null);
     try {
-      const [nextStatus, nextLog, nextBranches, nextRemotes] = await Promise.all([
+      const nextHistoryOffset = options?.resetHistory ? 0 : historyOffsetRef.current;
+      const nextHistoryQuery = options?.resetHistory ? "" : historyQueryRef.current;
+      const [nextStatus, nextLog, nextGraph, nextBranches, nextRemotes] = await Promise.all([
         gitInvoke<GitStatus>("git_status", { path }),
-        gitInvoke<{ commits: Commit[] }>("git_log", { path, limit: 60 }),
+        gitInvoke<CommitLogResult>("git_log", {
+          path,
+          limit: HISTORY_PAGE_SIZE,
+          offset: nextHistoryOffset,
+          query: nextHistoryQuery.trim() || undefined,
+        }),
+        gitInvoke<GitGraphResult>("git_graph", { path, limit: 80 }),
         gitInvoke<BranchInfo>("git_branches", { path }),
         gitInvoke<{ remotes: GitRemote[] }>("git_remotes", { path }),
       ]);
       setRepoPath(nextStatus.repo_root || path);
       setInputPath(nextStatus.repo_root || path);
       rememberSelectedRepo(nextStatus.repo_root || path);
+      if (options?.resetHistory) {
+        setHistoryQuery("");
+        setHistoryOffset(0);
+      }
       setStatus(nextStatus);
       setCommits(nextLog.commits);
+      setHistoryHasMore(Boolean(nextLog.has_more));
+      setGraphLines(nextGraph.lines);
       setBranches(nextBranches);
       setRemotes(nextRemotes.remotes);
     } catch (e) {
@@ -958,13 +1124,28 @@ export function GitPanel() {
     };
   }, [fetchAll, loadSavedRepos, t]);
 
+  useEffect(() => {
+    if (!repoPath) return;
+    const handle = window.setTimeout(() => {
+      setHistoryOffset(0);
+      historyOffsetRef.current = 0;
+      void fetchHistory(repoPath, historyQuery, 0);
+    }, 250);
+
+    return () => window.clearTimeout(handle);
+  }, [fetchHistory, historyQuery, repoPath]);
+
   const handleSelectRepo = useCallback(async (path: string) => {
     setLastOutput(null);
     setDiffState(null);
     setInputPath(path);
     setActiveTab("overview");
     setPage("detail");
-    await fetchAll(path);
+    setHistoryQuery("");
+    setHistoryOffset(0);
+    historyQueryRef.current = "";
+    historyOffsetRef.current = 0;
+    await fetchAll(path, { resetHistory: true });
   }, [fetchAll]);
 
   const handleAddRepo = useCallback(async (pathOverride?: string) => {
@@ -984,7 +1165,14 @@ export function GitPanel() {
       setActiveTab("overview");
       setPage("detail");
     } catch (e) {
-      setError(translateGitMessage(t, e instanceof Error ? e.message : String(e)));
+      const message = translateGitMessage(t, e instanceof Error ? e.message : String(e));
+      setError(message);
+      setOperationResult({
+        tone: "error",
+        title: t("git.feedback.errorTitle", { action: t("git.addRepo") }),
+        summary: firstOutputLine(message),
+        details: message,
+      });
     } finally {
       setRunningAction(null);
     }
@@ -998,18 +1186,43 @@ export function GitPanel() {
   ) => {
     if (!repoPath) return;
     setRunningAction(label);
+    setLastOutput(t("git.feedback.actionRunning", { action: label }));
     setError(null);
     try {
       const result = await gitInvoke<CommandResult>(cmd, { path: repoPath, ...extraArgs });
-      setLastOutput(result.output?.trim() || t("git.feedback.actionCompleted", { action: label }));
+      const message = formatActionOutput(result.output, t("git.feedback.actionCompleted", { action: label }));
+      setLastOutput(message);
+      setOperationResult({
+        tone: "success",
+        title: t("git.feedback.successTitle", { action: label }),
+        summary: firstOutputLine(message),
+        details: message,
+      });
       afterAction?.();
       await fetchAll(repoPath);
     } catch (e) {
-      setError(translateGitMessage(t, e instanceof Error ? e.message : String(e)));
+      const message = translateGitMessage(t, e instanceof Error ? e.message : String(e));
+      setError(message);
+      setOperationResult({
+        tone: "error",
+        title: t("git.feedback.errorTitle", { action: label }),
+        summary: firstOutputLine(message),
+        details: message,
+      });
     } finally {
       setRunningAction(null);
     }
   }, [fetchAll, repoPath, t]);
+
+  const handleHistoryPage = useCallback((direction: "prev" | "next") => {
+    if (!repoPath) return;
+    const nextOffset = direction === "next"
+      ? historyOffset + HISTORY_PAGE_SIZE
+      : Math.max(0, historyOffset - HISTORY_PAGE_SIZE);
+    setHistoryOffset(nextOffset);
+    historyOffsetRef.current = nextOffset;
+    void fetchHistory(repoPath, historyQuery, nextOffset);
+  }, [fetchHistory, historyOffset, historyQuery, repoPath]);
 
   const handleBrowse = useCallback(async () => {
     try {
@@ -1048,7 +1261,14 @@ export function GitPanel() {
         setLastOutput(message);
       }
     } catch (e) {
-      setError(translateGitMessage(t, e instanceof Error ? e.message : String(e)));
+      const message = translateGitMessage(t, e instanceof Error ? e.message : String(e));
+      setError(message);
+      setOperationResult({
+        tone: "error",
+        title: t("git.feedback.errorTitle", { action: t("git.removeRepo") }),
+        summary: firstOutputLine(message),
+        details: message,
+      });
     } finally {
       setRunningAction(null);
     }
@@ -1076,7 +1296,14 @@ export function GitPanel() {
       setDiffState({ title, output: res.output || "", loading: false });
     } catch (e) {
       setDiffState(null);
-      setError(translateGitMessage(t, e instanceof Error ? e.message : String(e)));
+      const message = translateGitMessage(t, e instanceof Error ? e.message : String(e));
+      setError(message);
+      setOperationResult({
+        tone: "error",
+        title: t("git.feedback.errorTitle", { action: t("git.action.diff") }),
+        summary: firstOutputLine(message),
+        details: message,
+      });
     }
   }, [repoPath, t]);
 
@@ -1124,6 +1351,12 @@ export function GitPanel() {
 
   return (
     <div className="hf-git-panel space-y-4">
+      <OperationResultDialog
+        result={operationResult}
+        onClose={() => setOperationResult(null)}
+        detailsLabel={t("git.feedback.details")}
+        closeLabel={t("git.action.close")}
+      />
       {error && <FeedbackBanner tone="error" message={error} />}
       {lastOutput && !error && <FeedbackBanner tone="success" message={lastOutput} />}
 
@@ -1133,6 +1366,7 @@ export function GitPanel() {
           repoPath={repoPath}
           status={status}
           commits={commits}
+          graphLines={graphLines}
           branches={branches}
           remotes={remotes}
           loading={loading}
@@ -1147,6 +1381,8 @@ export function GitPanel() {
           onBack={() => setPage("repos")}
           onRefresh={() => void fetchAll(repoPath)}
           onAction={handleAction}
+          onHistoryQueryChange={setHistoryQuery}
+          onHistoryPage={handleHistoryPage}
           onCommitMessageChange={setCommitMessage}
           onStageAllBeforeCommitChange={setStageAllBeforeCommit}
           onCheckoutBranchChange={setCheckoutBranch}

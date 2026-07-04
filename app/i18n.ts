@@ -16,6 +16,7 @@ const en = {
   "git.action.refresh": "Refresh",
   "git.action.fetch": "Fetch",
   "git.action.pull": "Pull",
+  "git.action.pullRebase": "Pull --rebase",
   "git.action.push": "Push",
   "git.action.diff": "Diff",
   "git.action.stage": "Stage",
@@ -26,6 +27,7 @@ const en = {
   "git.action.stash": "Stash",
   "git.action.stashWorktree": "Stash worktree",
   "git.action.closeDiff": "Close",
+  "git.action.close": "Close",
 
   "git.state.clean": "clean",
   "git.state.dirty": "dirty",
@@ -78,7 +80,20 @@ const en = {
 
   "git.feedback.savedRepo": "Saved repository: {name}",
   "git.feedback.removedRepo": "Removed repository: {path}",
+  "git.feedback.actionRunning": "{action} running...",
   "git.feedback.actionCompleted": "{action} completed.",
+  "git.feedback.successTitle": "{action} succeeded",
+  "git.feedback.errorTitle": "{action} failed",
+  "git.feedback.details": "Command details",
+
+  "git.history.searchPlaceholder": "Search commits by message, hash, or author...",
+  "git.history.prevPage": "Previous page",
+  "git.history.nextPage": "Next page",
+  "git.history.pageLabel": "Page {page}",
+  "git.history.loading": "Loading history...",
+  "git.history.noSearchResults": "No commits match this search.",
+  "git.history.showing": "Showing {start}-{end}",
+  "git.history.revisionGraph": "Revision graph",
 
   "git.confirm.discard": "Discard local changes in {path}? This cannot be undone.",
   "git.error.commitMessageRequired": "Commit message is required.",
@@ -110,6 +125,7 @@ const zh: Record<GitTranslationKey, string> = {
   "git.action.refresh": "刷新",
   "git.action.fetch": "获取",
   "git.action.pull": "拉取",
+  "git.action.pullRebase": "拉取并变基",
   "git.action.push": "推送",
   "git.action.diff": "Diff",
   "git.action.stage": "暂存",
@@ -120,6 +136,7 @@ const zh: Record<GitTranslationKey, string> = {
   "git.action.stash": "贮藏",
   "git.action.stashWorktree": "贮藏工作区",
   "git.action.closeDiff": "关闭",
+  "git.action.close": "关闭",
 
   "git.state.clean": "干净",
   "git.state.dirty": "有改动",
@@ -172,7 +189,20 @@ const zh: Record<GitTranslationKey, string> = {
 
   "git.feedback.savedRepo": "已保存仓库：{name}",
   "git.feedback.removedRepo": "已移除仓库：{path}",
+  "git.feedback.actionRunning": "{action} 正在执行...",
   "git.feedback.actionCompleted": "{action} 已完成。",
+  "git.feedback.successTitle": "{action} 成功",
+  "git.feedback.errorTitle": "{action} 失败",
+  "git.feedback.details": "命令详情",
+
+  "git.history.searchPlaceholder": "按提交说明、哈希或作者搜索...",
+  "git.history.prevPage": "上一页",
+  "git.history.nextPage": "下一页",
+  "git.history.pageLabel": "第 {page} 页",
+  "git.history.loading": "正在加载历史...",
+  "git.history.noSearchResults": "没有匹配的提交记录。",
+  "git.history.showing": "正在显示 {start}-{end}",
+  "git.history.revisionGraph": "Revision graph",
 
   "git.confirm.discard": "丢弃 {path} 的本地改动？此操作无法撤销。",
   "git.error.commitMessageRequired": "提交说明不能为空。",

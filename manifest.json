@@ -86,6 +86,7 @@
     { "id": "git_remove_repo", "description": "Remove a saved repository path" },
     { "id": "git_status",   "description": "Get git status for a repository path" },
     { "id": "git_log",      "description": "Get recent commit log" },
+    { "id": "git_graph",    "description": "Get revision graph lines" },
     { "id": "git_branches", "description": "List local and remote branches" },
     { "id": "git_remotes",  "description": "List configured remotes" },
     { "id": "git_pull",     "description": "Run git pull" },

@@ -24,6 +24,14 @@ fn hide_windows_command_window(_command: &mut Command) {}
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 fn run_git(args: &[&str], cwd: &str) -> Result<String, PluginError> {
+    run_git_with_success_codes(args, cwd, &[0])
+}
+
+fn run_git_with_success_codes(
+    args: &[&str],
+    cwd: &str,
+    success_codes: &[i32],
+) -> Result<String, PluginError> {
     let mut command = Command::new("git");
     hide_windows_command_window(&mut command);
     let output = command
@@ -32,11 +40,29 @@ fn run_git(args: &[&str], cwd: &str) -> Result<String, PluginError> {
         .output()
         .map_err(|e| PluginError::Process(format!("failed to run git: {e}")))?;
 
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let status_code = output.status.code().unwrap_or(-1);
+
+    if success_codes.contains(&status_code) {
+        Ok(join_command_output(&stdout, &stderr))
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        Err(PluginError::Process(format!("git error: {stderr}")))
+        let message = join_command_output(&stdout, &stderr);
+        Err(PluginError::Process(format!("git error: {message}")))
+    }
+}
+
+fn run_git_owned(args: &[String], cwd: &str) -> Result<String, PluginError> {
+    let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    run_git(&refs, cwd)
+}
+
+fn join_command_output(stdout: &str, stderr: &str) -> String {
+    match (stdout.trim(), stderr.trim()) {
+        ("", "") => String::new(),
+        (stdout, "") => stdout.to_string(),
+        ("", stderr) => stderr.to_string(),
+        (stdout, stderr) => format!("{stdout}\n{stderr}"),
     }
 }
 
@@ -309,35 +335,95 @@ pub fn git_status(args: Value, _ctx: &dyn PluginContext) -> Result<Value, Plugin
 
 pub fn git_log(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginError> {
     let path = get_repo_path(&args)?;
-    let limit = args["limit"].as_u64().unwrap_or(20);
+    let limit = args["limit"].as_u64().unwrap_or(40).clamp(1, 200) as usize;
+    let offset = args["offset"].as_u64().unwrap_or(0) as usize;
+    let query = get_non_empty_str(&args, "query")
+        .map(str::to_lowercase)
+        .unwrap_or_default();
 
-    let raw = run_git(
-        &[
-            "log",
-            &format!("-{limit}"),
-            "--pretty=format:%H|%h|%an|%ae|%ar|%s",
-            "--",
-        ],
-        &path,
-    )?;
+    let scan_limit = if query.is_empty() {
+        limit + 1
+    } else {
+        ((offset + limit + 1) * 4).clamp(200, 2000)
+    };
 
-    let commits: Vec<Value> = raw
+    let mut git_args = vec![
+        "log".to_string(),
+        format!("-{scan_limit}"),
+        "--pretty=format:%H|%h|%an|%ae|%ar|%s".to_string(),
+    ];
+    if query.is_empty() && offset > 0 {
+        git_args.push(format!("--skip={offset}"));
+    }
+    git_args.push("--".to_string());
+
+    let raw = run_git_owned(&git_args, &path)?;
+
+    let mut commits: Vec<Value> = raw
         .lines()
         .filter(|l| !l.is_empty())
-        .map(|line| {
+        .filter_map(|line| {
             let parts: Vec<&str> = line.splitn(6, '|').collect();
-            json!({
+            let commit = json!({
                 "hash":    parts.first().copied().unwrap_or(""),
                 "short":   parts.get(1).copied().unwrap_or(""),
                 "author":  parts.get(2).copied().unwrap_or(""),
                 "email":   parts.get(3).copied().unwrap_or(""),
                 "when":    parts.get(4).copied().unwrap_or(""),
                 "message": parts.get(5).copied().unwrap_or(""),
-            })
+            });
+
+            if query.is_empty() || commit_matches_query(&commit, &query) {
+                Some(commit)
+            } else {
+                None
+            }
         })
         .collect();
 
-    Ok(json!({ "commits": commits }))
+    if !query.is_empty() && offset > 0 {
+        commits = commits.into_iter().skip(offset).collect();
+    }
+
+    let has_more = commits.len() > limit;
+    commits.truncate(limit);
+
+    Ok(json!({
+        "commits": commits,
+        "limit": limit,
+        "offset": offset,
+        "has_more": has_more,
+    }))
+}
+
+fn commit_matches_query(commit: &Value, query: &str) -> bool {
+    ["hash", "short", "author", "email", "message", "when"]
+        .iter()
+        .filter_map(|key| commit[*key].as_str())
+        .any(|value| value.to_lowercase().contains(query))
+}
+
+// ─── git_graph ────────────────────────────────────────────────────────────────
+
+pub fn git_graph(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginError> {
+    let path = get_repo_path(&args)?;
+    let limit = args["limit"].as_u64().unwrap_or(80).clamp(1, 300);
+    let raw = run_git(
+        &[
+            "log",
+            "--graph",
+            "--decorate",
+            "--oneline",
+            "--all",
+            &format!("-{limit}"),
+        ],
+        &path,
+    )
+    .unwrap_or_default();
+
+    Ok(json!({
+        "lines": raw.lines().map(str::to_string).collect::<Vec<_>>()
+    }))
 }
 
 // ─── git_branches ─────────────────────────────────────────────────────────────
@@ -578,9 +664,23 @@ pub fn git_diff(args: Value, _ctx: &dyn PluginContext) -> Result<Value, PluginEr
     let staged = args["staged"].as_bool().unwrap_or(false);
     let file = get_non_empty_str(&args, "file");
 
+    let is_untracked = if let Some(file) = file {
+        !staged
+            && run_git(&["status", "--porcelain", "--", file], &path)
+                .unwrap_or_default()
+                .lines()
+                .any(|line| line.starts_with("??"))
+    } else {
+        false
+    };
+
     let output = match (staged, file) {
         (true, Some(file)) => run_git(&["diff", "--staged", "--", file], &path)?,
         (true, None) => run_git(&["diff", "--staged"], &path)?,
+        (false, Some(file)) if is_untracked => {
+            let null_file = if cfg!(target_os = "windows") { "NUL" } else { "/dev/null" };
+            run_git_with_success_codes(&["diff", "--no-index", "--", null_file, file], &path, &[0, 1])?
+        }
         (false, Some(file)) => run_git(&["diff", "--", file], &path)?,
         (false, None) => run_git(&["diff"], &path)?,
     };

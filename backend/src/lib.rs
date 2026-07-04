@@ -59,6 +59,7 @@ impl HaloForgePlugin for GitPlugin {
         ipc.register("git_remove_repo", Box::new(commands::git_remove_repo))?;
         ipc.register("git_status", Box::new(commands::git_status))?;
         ipc.register("git_log", Box::new(commands::git_log))?;
+        ipc.register("git_graph", Box::new(commands::git_graph))?;
         ipc.register("git_branches", Box::new(commands::git_branches))?;
         ipc.register("git_remotes", Box::new(commands::git_remotes))?;
         ipc.register("git_pull", Box::new(commands::git_pull))?;

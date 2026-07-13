@@ -52,8 +52,9 @@ jobs:
           node-version: 20
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
+          toolchain: 1.97.0
           targets: ${{ matrix.platform.target }}
 
       - name: Validate release inputs
@@ -83,7 +84,7 @@ jobs:
         run: |
           $target = "${{ matrix.platform.target }}"
           $suffix = "${{ matrix.platform.asset_suffix }}"
-          npx --yes @haloforge/plugin-pack@0.2.13 pack . --release --target $target --out dist/plugin-release
+          npx --yes @haloforge/plugin-pack@0.2.17 pack . --release --target $target --out dist/plugin-release
           $pkg = Get-ChildItem dist/plugin-release -Filter *.hfpkg | Select-Object -First 1
           if (-not $pkg) { throw "No .hfpkg artifact was created." }
           if ([string]::IsNullOrWhiteSpace($suffix)) {
@@ -162,7 +163,7 @@ jobs:
             $draftPath = "dist/plugin-release/catalog-draft-$env:PLUGIN_PLATFORM_SUFFIX.json"
           }
           $args = @(
-            "--yes", "@haloforge/plugin-pack@0.2.13",
+            "--yes", "@haloforge/plugin-pack@0.2.17",
             "metadata", "$env:PKG_PATH",
             "--artifact-url", $artifactUrl,
             "--source", "${{ inputs.source }}",
@@ -219,7 +220,7 @@ jobs:
       - name: Submit catalog draft
         if: env.HF_ADMIN_TOKEN != '' && matrix.platform.name == 'windows-x64'
         shell: pwsh
-        run: npx --yes @haloforge/plugin-pack@0.2.13 submit dist/plugin-release/catalog-draft.json --api-base-url https://admin.haloforge.dev --token-env HF_ADMIN_TOKEN
+        run: npx --yes @haloforge/plugin-pack@0.2.17 submit dist/plugin-release/catalog-draft.json --api-base-url https://admin.haloforge.dev --token-env HF_ADMIN_TOKEN
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4

@@ -30,7 +30,7 @@ impl HaloForgePlugin for GitPlugin {
         PluginMetadata {
             id: "dev.haloforge.git".into(),
             name: "Git Integration".into(),
-            version: "1.1.2".into(),
+            version: "1.2.8".into(),
             description: "Git branch, status, and log inside DevKit.".into(),
             author: "HaloForge Team".into(),
             abi_version: PLUGIN_ABI_VERSION,

@@ -218,7 +218,7 @@ jobs:
           }
 
       - name: Submit catalog draft
-        if: env.HF_ADMIN_TOKEN != '' && matrix.platform.name == 'windows-x64'
+        if: env.HF_ADMIN_TOKEN != ''
         shell: pwsh
         run: npx --yes @haloforge/plugin-pack@0.2.17 submit dist/plugin-release/catalog-draft.json --api-base-url https://admin.haloforge.dev --token-env HF_ADMIN_TOKEN
 

@@ -1,6 +1,6 @@
 [package]
 name = "hf-plugin-git"
-version = "1.2.8"
+version = "1.2.9"
 edition = "2021"
 description = "HaloForge built-in Git Integration plugin (backend)"
 

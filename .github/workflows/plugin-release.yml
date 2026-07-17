@@ -220,7 +220,7 @@ jobs:
       - name: Submit catalog draft
         if: env.HF_ADMIN_TOKEN != ''
         shell: pwsh
-        run: npx --yes @haloforge/plugin-pack@0.2.17 submit dist/plugin-release/catalog-draft.json --api-base-url https://admin.haloforge.dev --token-env HF_ADMIN_TOKEN
+        run: npx --yes @haloforge/plugin-pack@0.2.17 submit $env:CATALOG_DRAFT_PATH --api-base-url https://admin.haloforge.dev --token-env HF_ADMIN_TOKEN
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
